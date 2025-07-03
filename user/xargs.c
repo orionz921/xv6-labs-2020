@@ -19,10 +19,10 @@ int main(int argc, char* argv[]){
         char temp[MAXARG] = {"\0"};
         int cur = 0;
         for(int i = 0; i < strlen(buf); ++i){
-            if(buf[i] == '\n'){
-                argvs[idx] = temp;
-                argvs[idx+1] = 0;
+            if(buf[i] == '\n' || buf[i] == ' '){
                 if(fork() == 0){
+                    temp[cur] = 0;
+                    argvs[idx] = temp;
                     exec(argv[1],argvs);
                     exit(0);
                 }
