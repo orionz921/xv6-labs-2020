@@ -141,6 +141,8 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->kama_syscall_trace = 0;
+
   return p;
 }
 
@@ -314,6 +316,8 @@ fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
+
+  np->kama_syscall_trace = p->kama_syscall_trace;
 
   return pid;
 }
@@ -652,5 +656,17 @@ procdump(void)
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
+  }
+}
+
+void
+procnums(uint64* dst)
+{
+  *dst = 0;
+  struct proc* pp;
+  for(pp = proc; pp < &proc[NPROC]; pp++){
+    if(pp->state != UNUSED){
+      (*dst)++;
+    }
   }
 }
