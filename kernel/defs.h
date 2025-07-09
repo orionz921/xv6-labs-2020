@@ -181,7 +181,11 @@ int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             kama_vmprint(pagetable_t);         //打印页表内容函
 pagetable_t     kama_kvminit_newpgtbl();
 void            kama_kvm_free_kernelpgtbl(pagetable_t);
+int             kama_kvmcopymappings(pagetable_t, pagetable_t, uint64, uint64); 
+uint64          kama_kvmdealloc(pagetable_t, uint64, uint64);   
 
+int             copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
+int             copyinstr_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);

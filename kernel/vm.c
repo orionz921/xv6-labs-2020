@@ -395,23 +395,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
-
-  while(len > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > len)
-      n = len;
-    memmove(dst, (void *)(pa0 + (srcva - va0)), n);
-
-    len -= n;
-    dst += n;
-    srcva = va0 + PGSIZE;
-  }
-  return 0;
+  return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -421,40 +405,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  uint64 n, va0, pa0;
-  int got_null = 0;
-
-  while(got_null == 0 && max > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > max)
-      n = max;
-
-    char *p = (char *) (pa0 + (srcva - va0));
-    while(n > 0){
-      if(*p == '\0'){
-        *dst = '\0';
-        got_null = 1;
-        break;
-      } else {
-        *dst = *p;
-      }
-      --n;
-      --max;
-      p++;
-      dst++;
-    }
-
-    srcva = va0 + PGSIZE;
-  }
-  if(got_null){
-    return 0;
-  } else {
-    return -1;
-  }
+  return copyinstr_new(pagetable, dst, srcva, max);
 }
 
 
@@ -502,4 +453,47 @@ kama_kvm_free_kernelpgtbl(pagetable_t pagetable) {
         }
     }
     kfree((void*)pagetable);        // 释放当前级别页表所占用空间
+}
+
+int
+kama_kvmcopymappings(pagetable_t src, pagetable_t dst, uint64 start, uint64 sz) {
+    pte_t* pte;
+    uint64 pa, i;
+    uint flags;
+
+    
+    for (i = PGROUNDUP(start);i < start + sz;i += PGSIZE) {
+        if ((pte = walk(src, i, 0)) == 0)
+            panic("kvmcopymappings: pte should exist");
+        if ((*pte & PTE_V) == 0)
+            panic("kvmcopymappings: page not present");
+        pa = PTE2PA(*pte);
+
+        // `& ~PTE_U` 表示将该页的权限设置为非用户页
+        // 必须设置该权限，因为RISC-V 中内核是无法直接访问用户页的
+        flags = PTE_FLAGS(*pte) & ~PTE_U;
+        if (mappages(dst, i, PGSIZE, pa, flags) != 0)
+            goto err;
+    }
+
+    return 0;
+
+err:
+    //解除目标页表中已映射的页表项
+    uvmunmap(dst, PGROUNDUP(start), (i - PGROUNDUP(start)) / PGSIZE, 0);            
+    return -1;
+}
+
+// 与 uvmdealloc 功能类似，将程序内存从 oldsz 缩减到 newsz，但不释放实际内存
+uint64
+kama_kvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz) {
+    if (newsz >= oldsz)
+        return oldsz;
+
+    if (PGROUNDUP(newsz) < PGROUNDUP(oldsz)) {
+        int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
+        uvmunmap(pagetable, PGROUNDUP(newsz), npages, 0);
+    }
+
+    return newsz;
 }
